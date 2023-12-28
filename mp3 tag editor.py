@@ -186,21 +186,40 @@ class Mp3TagEditorApp:
                 entry.destroy()
         self.entry_rows.clear()
 
+        # Set column weights for distribution
+        for col_index, col_name in enumerate(self.columns):
+            weight = 4 if col_name == 'Lyrics' else 1  # Corresponding to 40% and 15% distribution
+            self.scrollable_frame.columnconfigure(col_index, weight=weight)
+
         # Re-create widgets with sorted data
         for index, row in dataframe.iterrows():
             row_entries = []
             for col_index, col in enumerate(self.columns):
-                # Calculate the width for each Entry widget based on the column widths
-                # Since the Entry widget's width parameter is in characters, we divide the pixel width by an average character width (approx. 8 pixels)
-                entry_width = self.lyrics_col_width if col == 'Lyrics' else self.other_col_width
-                entry = tk.Entry(self.scrollable_frame, font=self.custom_font, width=entry_width // 8)
+                entry = tk.Entry(self.scrollable_frame, font=self.custom_font)
                 entry.insert(0, row[col])
-                entry.grid(row=index + 1, column=col_index, sticky='ew')
+                entry.grid(row=index + 1, column=col_index, sticky='nsew')
                 row_entries.append(entry)
             self.entry_rows.append(row_entries)
 
+        # This function will be called whenever the root window is resized
+        def on_root_resize(event):
+            # Respond to the root's width change: adjust Entry widths proportionally
+            window_width = self.root.winfo_width()
+            total_weight = 4 + 1 * 4  # One 'Lyrics' column weight and four other columns
+            lyrics_width = int(window_width * 4 / total_weight)
+            other_width = int(window_width * 1 / total_weight)
+            
+            # Adjust the width of each entry widget
+            for row_entries in self.entry_rows:
+                for entry, col_name in zip(row_entries, self.columns):
+                    new_width = lyrics_width if col_name == 'Lyrics' else other_width
+                    entry.config(width=new_width // 8)  # Convert pixel width to character width approximation
+
+        self.root.bind('<Configure>', on_root_resize)
+
         # Update the window to reflect changes
         self.root.update_idletasks()
+
 
     def update_progress(self):
             try:
