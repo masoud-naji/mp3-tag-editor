@@ -62,6 +62,7 @@ def save_mp3_tags(dataframe, directory):
 
         print("Saving process completed.")
 
+# Function to clean non-printable characters from DataFrame columns
 def clean_non_printable_characters(dataframe):
     for col in dataframe.columns:
         if dataframe[col].dtype == object:
@@ -73,8 +74,18 @@ class Mp3TagEditorApp:
     def __init__(self, root):
         self.root = root
         root.title("MP3 Tag Editor")
-        root.geometry('800x600')
+        
+        # Set the initial window size to 75% of the screen width and height
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        window_width = int(screen_width * 0.75)
+        window_height = int(screen_height * 0.75)
+        root.geometry(f"{window_width}x{window_height}")
 
+        # Calculate the initial column widths as a percentage of the window width
+        self.lyrics_col_width = int(window_width * 0.40)  # 40% for Lyrics column
+        self.other_col_width = int(window_width * 0.15)  # 15% for each other column
+        
         self.entry_rows = []  # Initialize the entry rows list here
 
         # Define columns
@@ -154,6 +165,8 @@ class Mp3TagEditorApp:
 
         # Initialize a list to store edited data
         self.edited_data = []
+
+        # Start progress update loop
         self.update_progress()
 
     def start_loading_tags(self):
@@ -177,15 +190,17 @@ class Mp3TagEditorApp:
         for index, row in dataframe.iterrows():
             row_entries = []
             for col_index, col in enumerate(self.columns):
-                entry = tk.Entry(self.scrollable_frame, font=self.custom_font)
+                # Calculate the width for each Entry widget based on the column widths
+                # Since the Entry widget's width parameter is in characters, we divide the pixel width by an average character width (approx. 8 pixels)
+                entry_width = self.lyrics_col_width if col == 'Lyrics' else self.other_col_width
+                entry = tk.Entry(self.scrollable_frame, font=self.custom_font, width=entry_width // 8)
                 entry.insert(0, row[col])
                 entry.grid(row=index + 1, column=col_index, sticky='ew')
                 row_entries.append(entry)
             self.entry_rows.append(row_entries)
 
-        # Force the canvas to update and recalculate the scroll region
-        self.canvas.update_idletasks()
-        self.canvas.config(scrollregion=self.canvas.bbox("all"))
+        # Update the window to reflect changes
+        self.root.update_idletasks()
 
     def update_progress(self):
             try:
