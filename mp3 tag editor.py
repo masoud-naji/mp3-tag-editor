@@ -62,8 +62,11 @@ def save_mp3_tags(dataframe, directory):
 
         print("Saving process completed.")
 
-
-
+def clean_non_printable_characters(dataframe):
+    for col in dataframe.columns:
+        if dataframe[col].dtype == object:
+            dataframe[col] = dataframe[col].apply(lambda x: ''.join(filter(lambda c: c.isprintable(), str(x))))
+    return dataframe
 
 # Main GUI Application
 class Mp3TagEditorApp:
@@ -137,22 +140,21 @@ class Mp3TagEditorApp:
         self.sort_buttons = {}
 
         for index, col in enumerate(self.columns):
-            # Create sort buttons without icons
             sort_button = tk.Button(
                 self.scrollable_frame,
                 text=col,
                 font=self.custom_font,
-                command=lambda col=col: self.sort_data(col)
+                command=lambda col=col: self.sort_data(col)  # Pass col as a default argument
             )
             sort_button.grid(row=0, column=index, sticky='ew')
             self.scrollable_frame.columnconfigure(index, weight=1)
 
-            # Add a tag to the button to indicate sorting state
             sort_button.current_sort_state = 'not_sorted'
             self.sort_buttons[col] = sort_button
 
         # Initialize a list to store edited data
         self.edited_data = []
+        self.update_progress()
 
     def start_loading_tags(self):
         self.directory = filedialog.askdirectory()
@@ -161,59 +163,43 @@ class Mp3TagEditorApp:
 
     def load_tags(self):
         self.dataframe = load_mp3_tags(self.directory, self.progress_queue)
-        # Invoke display_entries in the main thread
+        self.dataframe = clean_non_printable_characters(self.dataframe)  # Clean the data
         self.root.after(0, self.display_entries, self.dataframe)
 
-    def update_progress(self):
-        try:
-            current, total = self.progress_queue.get_nowait()
-            progress_percent = int((current / total) * 100)
-            self.progress['value'] = progress_percent
-            self.progress_label.config(text=f"{progress_percent}% ({current}/{total})")
-            if progress_percent >= 100:
-                # Update the progress bar style to indicate completion
-                self.progress.config(style="green.Horizontal.TProgressbar")
-        except queue.Empty:
-            pass
-        finally:
-            # Schedule the next update even if the queue was empty
-            self.root.after(100, self.update_progress)
-
     def display_entries(self, dataframe):
-        # Clear any existing widgets in the entry rows
+        # Clear existing widgets
         for row_entries in self.entry_rows:
             for entry in row_entries:
                 entry.destroy()
         self.entry_rows.clear()
 
-        # Set the weights for the columns. The Lyrics column will have a weight of 4,
-        # and the other columns will have a weight of 1 each, which aligns with the desired percentages.
-        self.scrollable_frame.columnconfigure(0, weight=1)
-        self.scrollable_frame.columnconfigure(1, weight=1)
-        self.scrollable_frame.columnconfigure(2, weight=1)
-        self.scrollable_frame.columnconfigure(3, weight=1)
-        self.scrollable_frame.columnconfigure(4, weight=4)  # Assuming 'Lyrics' is the fifth column
-
-        # Create and grid the widgets for each row and column
+        # Re-create widgets with sorted data
         for index, row in dataframe.iterrows():
             row_entries = []
             for col_index, col in enumerate(self.columns):
                 entry = tk.Entry(self.scrollable_frame, font=self.custom_font)
                 entry.insert(0, row[col])
                 entry.grid(row=index + 1, column=col_index, sticky='ew')
-                entry.bind("<KeyRelease>", self.on_lyrics_edit)  # Bind to the on_lyrics_edit function
                 row_entries.append(entry)
             self.entry_rows.append(row_entries)
 
-        # Make sure the canvas and scrollbar fill their frame
-        self.canvas.pack(side="left", fill="both", expand=True)
-        self.scrollbar.pack(side="right", fill="y")
+        # Force the canvas to update and recalculate the scroll region
+        self.canvas.update_idletasks()
+        self.canvas.config(scrollregion=self.canvas.bbox("all"))
 
-        # Bind the <Configure> event to the canvas to adjust the scrollregion
-        self.canvas.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-
-        # Update progress loop if needed
-        self.update_progress()
+    def update_progress(self):
+            try:
+                current, total = self.progress_queue.get_nowait()
+                progress_percent = int((current / total) * 100)
+                self.progress['value'] = progress_percent
+                self.progress_label.config(text=f"{progress_percent}% ({current}/{total})")
+                if progress_percent >= 100:
+                    self.progress.config(style="green.Horizontal.TProgressbar")
+            except queue.Empty:
+                pass
+            finally:
+                # Schedule the next update
+                self.root.after(100, self.update_progress)
 
     def on_lyrics_edit(self, event):
         edited_row_index = event.widget.grid_info()['row'] - 1
@@ -255,24 +241,23 @@ class Mp3TagEditorApp:
             self.message_label.config(text="Error: No directory selected")
             return
 
-        # Update the sort button text based on sorting state
+        # Determine the new sorting state based on the current state
         sort_button = self.sort_buttons[column]
-        if sort_button.current_sort_state == 'not_sorted':
-            sort_button.current_sort_state = 'sorted_asc'
-            sort_button.config(text=f"{column} ⇧")
-            self.dataframe = self.dataframe.sort_values(by=column, ascending=True)
-        elif sort_button.current_sort_state == 'sorted_asc':
-            sort_button.current_sort_state = 'sorted_desc'
-            sort_button.config(text=f"{column} ⇩")
-            self.dataframe = self.dataframe.sort_values(by=column, ascending=False)
+        new_sort_state = 'sorted_asc' if sort_button.current_sort_state == 'not_sorted' else 'sorted_desc' if sort_button.current_sort_state == 'sorted_asc' else 'not_sorted'
+        
+        # Update the sort button's appearance and sort the data
+        sort_button.current_sort_state = new_sort_state
+        sort_button.config(text=f"{column} {'⇧' if new_sort_state == 'sorted_asc' else '⇩' if new_sort_state == 'sorted_desc' else ''}")
+        
+        if new_sort_state != 'not_sorted':
+            # Sort the DataFrame and reset the index
+            self.dataframe = self.dataframe.sort_values(by=column, ascending=(new_sort_state == 'sorted_asc')).reset_index(drop=True)
+            self.display_entries(self.dataframe)  # Update the display with the sorted DataFrame
         else:
-            sort_button.current_sort_state = 'not_sorted'
-            sort_button.config(text=column)
+            # If not sorted, reload the tags
             self.dataframe = load_mp3_tags(self.directory, self.progress_queue)
+            self.display_entries(self.dataframe)  # Update the display with the reloaded DataFrame
 
-        # Refresh the displayed entries after sorting
-        self.display_entries(self.dataframe)
-    
 
 if __name__ == "__main__":
     # Get the directory where the script is located
