@@ -1,11 +1,12 @@
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, font
+from tkinter import ttk, filedialog, font
 import pandas as pd
 import os
 import sys
 import eyed3
 import threading
 import queue
+
 
 # Function to load MP3 tags into a DataFrame
 def load_mp3_tags(directory, progress_queue):
@@ -74,70 +75,83 @@ class Mp3TagEditorApp:
     def __init__(self, root):
         self.root = root
         root.title("MP3 Tag Editor")
-        
-        # Set the initial window size to 75% of the screen width and height
+
+        # Define the dark theme colors
+        dark_gray = '#2e2e2e'
+        light_gray = '#555555'
+        white = '#ffffff'
+        hover_color = '#000000'
+
+        # Set the initial window size and background color to dark gray
         screen_width = root.winfo_screenwidth()
         screen_height = root.winfo_screenheight()
         window_width = int(screen_width * 0.75)
         window_height = int(screen_height * 0.75)
         root.geometry(f"{window_width}x{window_height}")
+        root.configure(bg=dark_gray)
 
-        # Calculate the initial column widths as a percentage of the window width
-        self.lyrics_col_width = int(window_width * 0.40)  # 40% for Lyrics column
-        self.other_col_width = int(window_width * 0.15)  # 15% for each other column
-        
-        self.entry_rows = []  # Initialize the entry rows list here
-
-        # Define columns
-        self.columns = ['Filename', 'Title', 'Artist', 'Album', 'Lyrics']
-
-        # Initialize the queue for progress updates
+        # Initialize the queue for progress updates and entry rows
         self.progress_queue = queue.Queue()
-        
-        # GUI elements like buttons
-        self.button_frame = tk.Frame(root)
-        self.button_frame.pack(fill=tk.X)
+        self.entry_rows = []
 
-        self.load_button = tk.Button(self.button_frame, text="Load MP3 Tags", command=self.start_loading_tags)
-        self.load_button.pack(side=tk.LEFT)
+        # Set up the style for ttk widgets to match the dark theme
+        style = ttk.Style()
+        style.theme_use('default')
 
-        self.save_button = tk.Button(self.button_frame, text="Save MP3 Tags", command=self.save_tags)
-        self.save_button.pack(side=tk.LEFT)
-        
-        # Message label for displaying status
-        self.message_label = tk.Label(self.button_frame, text="")
-        self.message_label.pack(side=tk.LEFT)
+        # Configure the style for ttk widgets
+        style.configure('TButton', background=light_gray, foreground=white)
+        style.configure('TFrame', background=dark_gray)
+        style.configure('TLabel', background=dark_gray, foreground=white)
+        style.configure('TEntry', background=light_gray, foreground=white)
+        style.map('TButton',
+                  background=[('active', light_gray)],
+                  foreground=[('active', hover_color)])
+
+        # Configure the Treeview for a dark theme
+        style.configure("Treeview",
+                        background=dark_gray,
+                        foreground=white,
+                        fieldbackground=dark_gray)
+        style.map('Treeview',
+                  background=[('selected', light_gray)])
+        style.configure("Treeview.Heading",
+                        background=light_gray,
+                        foreground=white,
+                        font=('Helvetica', 10, 'bold'))
+
+        # Configure the Scrollbar for a dark theme
+        style.configure("Vertical.TScrollbar", background=light_gray, troughcolor=dark_gray)
 
         # Progressbar style
-        style = ttk.Style(root)
-        style.configure("green.Horizontal.TProgressbar", background='green')
+        style.configure("green.Horizontal.TProgressbar", background=light_gray)
 
-        self.progress = ttk.Progressbar(
-            self.button_frame,
-            orient="horizontal",
-            mode="determinate",
-            length=100,
-            style="green.Horizontal.TProgressbar"
-        )
-        self.progress.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        # Apply the theme to the button frame and buttons
+        self.button_frame = ttk.Frame(root, style='TFrame')
+        self.button_frame.pack(fill=tk.X, padx=10, pady=10)
 
-        self.progress_label = tk.Label(self.button_frame, text="0%")
-        self.progress_label.pack(side=tk.LEFT)
+        self.load_button = ttk.Button(self.button_frame, text="Load MP3 Tags", style='TButton', command=self.start_loading_tags)
+        self.load_button.pack(side=tk.LEFT, padx=5)
 
-        self.entry_frame = tk.Frame(root)
-        self.entry_frame.pack(fill=tk.BOTH, expand=True)
+        self.save_button = ttk.Button(self.button_frame, text="Save MP3 Tags", style='TButton', command=self.save_tags)
+        self.save_button.pack(side=tk.LEFT, padx=5)
 
-        self.canvas = tk.Canvas(self.entry_frame)
-        self.scrollbar = tk.Scrollbar(self.entry_frame, orient="vertical", command=self.canvas.yview)
-        self.scrollable_frame = tk.Frame(self.canvas)
+        self.message_label = ttk.Label(self.button_frame, text="", background=dark_gray, foreground=white)
+        self.message_label.pack(side=tk.LEFT, padx=5)
 
-        self.scrollable_frame.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(
-                scrollregion=self.canvas.bbox("all")
-            )
-        )
+        self.progress = ttk.Progressbar(self.button_frame, style="green.Horizontal.TProgressbar", orient="horizontal", length=100, mode="determinate")
+        self.progress.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
 
+        self.progress_label = ttk.Label(self.button_frame, text="0%", background=dark_gray, foreground=white)
+        self.progress_label.pack(side=tk.LEFT, padx=5)
+
+        self.entry_frame = ttk.Frame(root, style='TFrame')
+        self.entry_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        self.canvas = tk.Canvas(self.entry_frame, bg=dark_gray, highlightthickness=0)
+        self.scrollbar = ttk.Scrollbar(self.entry_frame, orient="vertical", command=self.canvas.yview, style="Vertical.TScrollbar")
+        self.scrollable_frame = ttk.Frame(self.canvas, style='TFrame')
+
+        self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
 
@@ -147,26 +161,22 @@ class Mp3TagEditorApp:
         # Custom font for the widgets to control height
         self.custom_font = font.Font(size=10, family='Helvetica')
 
+        # Define columns
+        self.columns = ['Filename', 'Title', 'Artist', 'Album', 'Lyrics']
+
         # Store sort buttons by column name
         self.sort_buttons = {}
-
         for index, col in enumerate(self.columns):
-            sort_button = tk.Button(
-                self.scrollable_frame,
-                text=col,
-                font=self.custom_font,
-                command=lambda col=col: self.sort_data(col)  # Pass col as a default argument
-            )
-            sort_button.grid(row=0, column=index, sticky='ew')
+            sort_button = ttk.Button(self.scrollable_frame, text=col, style='TButton', command=lambda c=col: self.sort_data(c))
+            sort_button.grid(row=0, column=index, sticky='nsew', padx=5, pady=5)
             self.scrollable_frame.columnconfigure(index, weight=1)
-
             sort_button.current_sort_state = 'not_sorted'
             self.sort_buttons[col] = sort_button
 
         # Initialize a list to store edited data
         self.edited_data = []
 
-        # Start progress update loop
+        # Start the progress update loop
         self.update_progress()
 
     def start_loading_tags(self):
